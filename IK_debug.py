@@ -2,6 +2,7 @@ from sympy import *
 from time import time
 from mpmath import radians
 import tf
+import numpy
 
 '''
 Format of test case is [ [[EE position],[EE orientation as quaternions]],[WC location],[joint angles]]
@@ -63,8 +64,15 @@ def test_code(test_case):
     ## 
 
     ## Insert IK code here!
-    
-    theta1 = 0
+    EE_pose = numpy.dot(tf.transformations.translation_matrix((position.x, position.y, position.z)),
+                   tf.transformations.quaternion_matrix((orientation.x, orientation.y, orientation.z, orientation.w)))
+    qz = tf.transformations.quaternion_about_axis(pi, (0,0,1))    
+    qy = tf.transformations.quaternion_about_axis(-pi/2, (0,1,0))    
+    R_corr = numpy.dot(tf.transformations.quaternion_matrix(qz), tf.transformations.quaternion_matrix(qy))
+    EE_base = numpy.dot(EE_pose, R_corr)
+    wrist_pos = EE_base[:, 3] - 0.303 * EE_base[:, 2]        
+
+    theta1 = numpy.arctan2(wrist_pos[1], wrist_pos[0])
     theta2 = 0
     theta3 = 0
     theta4 = 0
