@@ -64,20 +64,98 @@ def test_code(test_case):
     ## 
 
     ## Insert IK code here!
-    EE_pose = numpy.dot(tf.transformations.translation_matrix((position.x, position.y, position.z)),
-                   tf.transformations.quaternion_matrix((orientation.x, orientation.y, orientation.z, orientation.w)))
-    qz = tf.transformations.quaternion_about_axis(pi, (0,0,1))    
-    qy = tf.transformations.quaternion_about_axis(-pi/2, (0,1,0))    
-    R_corr = numpy.dot(tf.transformations.quaternion_matrix(qz), tf.transformations.quaternion_matrix(qy))
-    EE_base = numpy.dot(EE_pose, R_corr)
-    wrist_pos = EE_base[:, 3] - 0.303 * EE_base[:, 2]        
+    class KukaDH:
+        def __init__(self):
+            self.alpha0 = self.alpha2 = self.alpha6 = 0
+            self.alpha1 = self.alpha3 = self.alpha5 = -pi/2
+            self.alpha4 = pi/2
 
+            self.a0 = self.a4 = self.a5 = self.a6 = 0
+            self.a1 = 0.35
+            self.a2 = 1.25
+            self.a3 = -0.054
+
+            self.d2 = self.d3 = self.d5 = self.d6 = 0
+            self.d1 = 0.75
+            self.d4 = 1.5
+            self.dg = 0.303
+
+    Kuka = KukaDH()
+
+    ee_pose = numpy.dot(tf.transformations.translation_matrix((position.x, position.y, position.z)),
+                   tf.transformations.quaternion_matrix((orientation.x, orientation.y, orientation.z, orientation.w)))
+    qz = tf.transformations.rotation_matrix(pi, (0,0,1))    
+    qy = tf.transformations.rotation_matrix(-pi/2, (0,1,0))    
+    R_corr = numpy.dot(qz, qy)
+    ee_base = numpy.dot(ee_pose, R_corr)
+    wrist_pos = ee_base[0:3, 3] - 0.303 * ee_base[0:3, 2]        
+
+    def dh_transformation(alpha, a, d, theta):
+        xaxis, zaxis = (1, 0, 0), (0, 0, 1)
+        qx = tf.transformations.rotation_matrix(alpha, xaxis)    
+        qz = tf.transformations.rotation_matrix(theta, zaxis)    
+        ax = tf.transformations.translation_matrix((a, 0, 0))
+        dz = tf.transformations.translation_matrix((0, 0, d))
+        T = numpy.dot(numpy.dot(qx, ax), numpy.dot(qz, dz))
+        return T
+
+    q1 = numpy.arctan2(wrist_pos[1], wrist_pos[0])
+    print q1
+    def joint2_position(theta1):        
+        T0_1 = dh_transformation(Kuka.alpha0, Kuka.a0, Kuka.d1, q1)
+        T1_2 = dh_transformation(0, Kuka.a1, 0, 0)
+        T = numpy.dot(T0_1, T1_2)
+        return T[0:3, 3]
+
+    def vec_len(vec):
+        sqr_len = [pos**2 for pos in vec]
+        return numpy.sqrt(sum(sqr_len))
+
+    vec_J2_W = numpy.subtract(wrist_pos, joint2_position(q1))
+    side_c = vec_len(vec_J2_W)
+    c3_prime = (side_c**2 - Kuka.a2**2 - Kuka.d4**2) / (2 * Kuka.a2 * Kuka.d4)
+
+    prime3 = numpy.arctan2(numpy.sqrt(1 - (c3_prime**2)), c3_prime)
+
+    beta = numpy.arctan2(vec_J2_W[2], numpy.sqrt(vec_J2_W[0]**2 + vec_J2_W[1]**2))
+    gamma = numpy.arctan2(Kuka.d4 * numpy.sin(prime3), Kuka.d4 * numpy.cos(prime3) + Kuka.a2)
+
+    q2 = (numpy.pi/2) - beta - gamma
+    q3 = prime3 - (numpy.pi/2)
+
+    (roll, pitch, yaw) = tf.transformations.euler_from_quaternion([orientation.x, orientation.y, orientation.z, orientation.w])
+    print roll, pitch, yaw
+    xaxis, yaxis, zaxis = (1, 0, 0), (0, 1, 0), (0, 0, 1)
+    Rrpy = numpy.dot(   numpy.dot(tf.transformations.rotation_matrix(yaw, zaxis), tf.transformations.rotation_matrix(pitch, yaxis)), 
+                        numpy.dot(tf.transformations.rotation_matrix(roll, xaxis), R_corr))
+    print '********************'
+    print Rrpy
+    print ee_base
+    print tf.transformations.euler_from_matrix(Rrpy)
+    T0_1 = dh_transformation(Kuka.alpha0, Kuka.a0, Kuka.d1, q1)
+    T1_2 = dh_transformation(Kuka.alpha1, Kuka.a1, Kuka.d2, q2 - (numpy.pi/2))
+    T2_3 = dh_transformation(Kuka.alpha2, Kuka.a2, Kuka.d3, q3)
+    T0_3 = numpy.dot(numpy.dot(T0_1, T1_2), T2_3)
+
+    print T0_3
+    T3_6 = numpy.dot(numpy.linalg.inv(T0_3), Rrpy)
+    print T3_6
+    print T3_6[1][2], numpy.sqrt(1-(T3_6[1][2]**2)), numpy.arctan2( numpy.sqrt(1 - T3_6[1][2]**2), T3_6[1][2])
+
+    # T1_2 = dh_transformation()
+    # T2_3 = dh_transformation()
+    # T3_4 = dh_transformation()
+    # T4_5 = dh_transformation()
+    # T5_6 = dh_transformation()
+    # T6_7 = dh_transformation()       
+
+    # T0_2 = 
     theta1 = numpy.arctan2(wrist_pos[1], wrist_pos[0])
-    theta2 = 0
-    theta3 = 0
-    theta4 = 0
-    theta5 = 0
-    theta6 = 0
+    theta2 = (numpy.pi/2) - beta - gamma
+    theta3 = prime3 - (numpy.pi/2)
+    theta4 = numpy.arctan2( T3_6[2][2], -T3_6[0][2])
+    theta5 = numpy.arctan2( numpy.sqrt(1 - T3_6[1][2]**2), T3_6[1][2])
+    theta6 = numpy.arctan2( -T3_6[1][1], T3_6[1][0])
 
     ## 
     ########################################################################################
@@ -87,13 +165,31 @@ def test_code(test_case):
     ## as the input and output the position of your end effector as your_ee = [x,y,z]
 
     ## (OPTIONAL) YOUR CODE HERE!
+    Test = [None] * 8
+    Test[0] = dh_transformation(Kuka.alpha0, Kuka.a0, Kuka.d1, theta1)
+    Test[1] = dh_transformation(Kuka.alpha1, Kuka.a1, Kuka.d2, theta2 - (numpy.pi/2))
+    Test[2] = dh_transformation(Kuka.alpha2, Kuka.a2, Kuka.d3, theta3)
+    Test[3] = dh_transformation(Kuka.alpha3, Kuka.a3, Kuka.d4, theta4)
+    Test[4] = dh_transformation(Kuka.alpha4, Kuka.a4, Kuka.d5, theta5)
+    Test[5] = dh_transformation(Kuka.alpha5, Kuka.a5, Kuka.d6, theta6)
+    Test[6] = dh_transformation(Kuka.alpha6, Kuka.a6, Kuka.dg, 0)
+    Test[7] = R_corr
 
+    Test0_g = tf.transformations.identity_matrix()
+    Test0_w = tf.transformations.identity_matrix()
+    count = 0
+    for tm in Test:
+        count += 1
+        Test0_g = numpy.dot(Test0_g, tm)
+        if count == 6:
+            Test0_w = numpy.dot(Test0_g, R_corr)
+    print Test0_g[0:3, 3], Test0_w[0:3, 3]
     ## End your code input for forward kinematics here!
     ########################################################################################
 
     ## For error analysis please set the following variables of your WC location and EE location in the format of [x,y,z]
-    your_wc = [1,1,1] # <--- Load your calculated WC values in this array
-    your_ee = [1,1,1] # <--- Load your calculated end effector value from your forward kinematics
+    your_wc = Test0_w[0:3, 3] # <--- Load your calculated WC values in this array
+    your_ee = Test0_g[0:3, 3] # <--- Load your calculated end effector value from your forward kinematics
     ########################################################################################
 
     ## Error analysis
@@ -144,6 +240,6 @@ def test_code(test_case):
 
 if __name__ == "__main__":
     # Change test case number for different scenarios
-    test_case_number = 1
+    test_case_number = 2
 
     test_code(test_cases[test_case_number])
