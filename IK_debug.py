@@ -80,7 +80,98 @@ def test_code(test_case):
             self.d4 = 1.5
             self.dg = 0.303
 
+    class KukaR210:
+        def __init__(self):
+            self.alpha0 = self.alpha2 = self.alpha6 = 0
+            self.alpha1 = self.alpha3 = self.alpha5 = -pi/2
+            self.alpha4 = pi/2
+
+            self.a0 = self.a4 = self.a5 = self.a6 = 0
+            self.a1 = 0.35
+            self.a2 = 1.25
+            self.a3 = -0.054
+
+            self.d2 = self.d3 = self.d5 = self.d6 = 0
+            self.d1 = 0.75
+            self.d4 = 1.5
+            self.dg = 0.303
+
+            qz = tf.transformations.rotation_matrix(pi, (0,0,1))    
+            qy = tf.transformations.rotation_matrix(-pi/2, (0,1,0))    
+            self.R_corr = numpy.dot(qz, qy)
+
+        def get_dh_transformation(self, alpha, a, d, theta):
+            xaxis, zaxis = (1, 0, 0), (0, 0, 1)
+            qx = tf.transformations.rotation_matrix(alpha, xaxis)    
+            qz = tf.transformations.rotation_matrix(theta, zaxis)    
+            ax = tf.transformations.translation_matrix((a, 0, 0))
+            dz = tf.transformations.translation_matrix((0, 0, d))
+            T = numpy.dot(numpy.dot(qx, ax), numpy.dot(qz, dz))
+            return T
+
+        # Get joint2 position 
+        def get_joint2_position(self, theta1):        
+            T0_1 = dh_transformation(self.alpha0, self.a0, self.d1, q1)
+            T1_2 = dh_transformation(0, self.a1, 0, 0)
+            T = numpy.dot(T0_1, T1_2)
+            return T[0:3, 3]
+
+        def get_T0_3_inv(self, q1, q2, q3):
+            T0_1 = dh_transformation(self.alpha0, self.a0, self.d1, q1)
+            T1_2 = dh_transformation(self.alpha1, self.a1, self.d2, q2 - (numpy.pi/2))
+            T2_3 = dh_transformation(self.alpha2, self.a2, self.d3, q3)
+            T0_3 = numpy.dot(numpy.dot(T0_1, T1_2), T2_3)
+            return numpy.linalg.inv(T0_3)
+
+        def get_ee_pose_base(self, position, orientation):
+            ee_pose = numpy.dot(tf.transformations.translation_matrix((position.x, position.y, position.z)),
+                        tf.transformations.quaternion_matrix((orientation.x, orientation.y, orientation.z, orientation.w)))
+            return numpy.dot(ee_pose, self.R_corr)
+
+        def get_wrist_position(self, ee_base):
+            return ee_base[0:3, 3] - self.dg * ee_base[0:3, 2]
+
+        def vec_len(self, vec):
+            sqr_len = [pos**2 for pos in vec]
+            return numpy.sqrt(sum(sqr_len))
+
+        def IK(self, ee_position, ee_orientation):
+            # calculate wrist position from ee position and orientation
+            ee_base = self.get_ee_pose_base(ee_position, ee_orientation)
+            wrist_pos = self.get_wrist_position(ee_base)
+
+            # calculate theta1 by wrist position
+            q1 = numpy.arctan2(wrist_pos[1], wrist_pos[0])
+
+            # calculate triangle's side oppsition with theta3
+            vec_J2_W = numpy.subtract(wrist_pos, self.get_joint2_position(q1))
+            side_B = self.vec_len(vec_J2_W)
+
+            # find theta 3 prime which expresses the relative angle with theta 2
+            c3_prime = (side_B**2 - self.a2**2 - self.d4**2) / (2 * self.a2 * self.d4)
+            prime3 = numpy.arctan2(numpy.sqrt(1 - (c3_prime**2)), c3_prime)
+
+            # find theta2 and theta3
+            beta = numpy.arctan2(vec_J2_W[2], numpy.sqrt(vec_J2_W[0]**2 + vec_J2_W[1]**2))
+            gamma = numpy.arctan2(Kuka.d4 * numpy.sin(prime3), Kuka.d4 * numpy.cos(prime3) + Kuka.a2)
+
+            q2 = (numpy.pi/2) - beta - gamma
+            q3 = prime3 - (numpy.pi/2)
+
+            # get T3_6 
+            T0_3_inv = self.get_T0_3_inv(q1, q2, q3)
+            T3_6 = numpy.dot(T0_3_inv, ee_base)
+
+            # calculate theta4, theta5, theta6
+            q4 = numpy.arctan2( T3_6[2][2], -T3_6[0][2])
+            q5 = numpy.arctan2( numpy.sqrt(1 - T3_6[1][2]**2), T3_6[1][2])
+            q6 = numpy.arctan2( -T3_6[1][1], T3_6[1][0])
+
+            return (q1, q2, q3, q4, q5, q6)
+
+
     Kuka = KukaDH()
+    kuka_r210 = KukaR210()
 
     ee_pose = numpy.dot(tf.transformations.translation_matrix((position.x, position.y, position.z)),
                    tf.transformations.quaternion_matrix((orientation.x, orientation.y, orientation.z, orientation.w)))
@@ -150,12 +241,15 @@ def test_code(test_case):
     # T6_7 = dh_transformation()       
 
     # T0_2 = 
-    theta1 = numpy.arctan2(wrist_pos[1], wrist_pos[0])
-    theta2 = (numpy.pi/2) - beta - gamma
-    theta3 = prime3 - (numpy.pi/2)
-    theta4 = numpy.arctan2( T3_6[2][2], -T3_6[0][2])
-    theta5 = numpy.arctan2( numpy.sqrt(1 - T3_6[1][2]**2), T3_6[1][2])
-    theta6 = numpy.arctan2( -T3_6[1][1], T3_6[1][0])
+    # theta1 = numpy.arctan2(wrist_pos[1], wrist_pos[0])
+    # theta2 = (numpy.pi/2) - beta - gamma
+    # theta3 = prime3 - (numpy.pi/2)
+    # theta4 = numpy.arctan2( T3_6[2][2], -T3_6[0][2])
+    # theta5 = numpy.arctan2( numpy.sqrt(1 - T3_6[1][2]**2), T3_6[1][2])
+    # theta6 = numpy.arctan2( -T3_6[1][1], T3_6[1][0])
+
+    (theta1, theta2, theta3, theta4, theta5, theta6) = kuka_r210.IK(position, orientation)
+
 
     ## 
     ########################################################################################
@@ -240,6 +334,6 @@ def test_code(test_case):
 
 if __name__ == "__main__":
     # Change test case number for different scenarios
-    test_case_number = 2
+    test_case_number = 3
 
     test_code(test_cases[test_case_number])
