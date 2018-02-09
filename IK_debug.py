@@ -79,7 +79,7 @@ def test_code(test_case):
             self.d1 = 0.75
             self.d4 = 1.5
             self.dg = 0.303
-
+            
     class KukaR210:
         def __init__(self):
             self.alpha0 = self.alpha2 = self.alpha6 = 0
@@ -95,6 +95,8 @@ def test_code(test_case):
             self.d1 = 0.75
             self.d4 = 1.5
             self.dg = 0.303
+            self.d34 = 0.96
+            self.d45 = 0.54
 
             qz = tf.transformations.rotation_matrix(pi, (0,0,1))    
             qy = tf.transformations.rotation_matrix(-pi/2, (0,1,0))    
@@ -147,8 +149,11 @@ def test_code(test_case):
             vec_J2_W = numpy.subtract(wrist_pos, self.get_joint2_position(q1))
             side_B = self.vec_len(vec_J2_W)
 
+            side_d4_cor = numpy.sqrt(self.d4**2 + self.a3**2)
+            delta = numpy.arctan2(abs(self.a3), self.d34) - numpy.arctan2(abs(self.a3), self.d4)
+            print('delta', delta)
             # find theta 3 prime which expresses the relative angle with theta 2
-            c3_prime = (side_B**2 - self.a2**2 - self.d4**2) / (2 * self.a2 * self.d4)
+            c3_prime = (side_B**2 - self.a2**2 - side_d4_cor**2) / (2 * self.a2 * side_d4_cor)
             prime3 = numpy.arctan2(numpy.sqrt(1 - (c3_prime**2)), c3_prime)
 
             # find theta2 and theta3
@@ -156,7 +161,7 @@ def test_code(test_case):
             gamma = numpy.arctan2(Kuka.d4 * numpy.sin(prime3), Kuka.d4 * numpy.cos(prime3) + Kuka.a2)
 
             q2 = (numpy.pi/2) - beta - gamma
-            q3 = prime3 - (numpy.pi/2)
+            q3 = prime3 - (numpy.pi/2) - delta
 
             # get T3_6 
             T0_3_inv = self.get_T0_3_inv(q1, q2, q3)
@@ -215,23 +220,23 @@ def test_code(test_case):
     q3 = prime3 - (numpy.pi/2)
 
     (roll, pitch, yaw) = tf.transformations.euler_from_quaternion([orientation.x, orientation.y, orientation.z, orientation.w])
-    print roll, pitch, yaw
-    xaxis, yaxis, zaxis = (1, 0, 0), (0, 1, 0), (0, 0, 1)
-    Rrpy = numpy.dot(   numpy.dot(tf.transformations.rotation_matrix(yaw, zaxis), tf.transformations.rotation_matrix(pitch, yaxis)), 
-                        numpy.dot(tf.transformations.rotation_matrix(roll, xaxis), R_corr))
-    print '********************'
-    print Rrpy
-    print ee_base
-    print tf.transformations.euler_from_matrix(Rrpy)
-    T0_1 = dh_transformation(Kuka.alpha0, Kuka.a0, Kuka.d1, q1)
-    T1_2 = dh_transformation(Kuka.alpha1, Kuka.a1, Kuka.d2, q2 - (numpy.pi/2))
-    T2_3 = dh_transformation(Kuka.alpha2, Kuka.a2, Kuka.d3, q3)
-    T0_3 = numpy.dot(numpy.dot(T0_1, T1_2), T2_3)
+    # print roll, pitch, yaw
+    # xaxis, yaxis, zaxis = (1, 0, 0), (0, 1, 0), (0, 0, 1)
+    # Rrpy = numpy.dot(   numpy.dot(tf.transformations.rotation_matrix(yaw, zaxis), tf.transformations.rotation_matrix(pitch, yaxis)), 
+    #                     numpy.dot(tf.transformations.rotation_matrix(roll, xaxis), R_corr))
+    # print '********************'
+    # print Rrpy
+    # print ee_base
+    # print tf.transformations.euler_from_matrix(Rrpy)
+    # T0_1 = dh_transformation(Kuka.alpha0, Kuka.a0, Kuka.d1, q1)
+    # T1_2 = dh_transformation(Kuka.alpha1, Kuka.a1, Kuka.d2, q2 - (numpy.pi/2))
+    # T2_3 = dh_transformation(Kuka.alpha2, Kuka.a2, Kuka.d3, q3)
+    # T0_3 = numpy.dot(numpy.dot(T0_1, T1_2), T2_3)
 
-    print T0_3
-    T3_6 = numpy.dot(numpy.linalg.inv(T0_3), Rrpy)
-    print T3_6
-    print T3_6[1][2], numpy.sqrt(1-(T3_6[1][2]**2)), numpy.arctan2( numpy.sqrt(1 - T3_6[1][2]**2), T3_6[1][2])
+    # print T0_3
+    # T3_6 = numpy.dot(numpy.linalg.inv(T0_3), Rrpy)
+    # print T3_6
+    # print T3_6[1][2], numpy.sqrt(1-(T3_6[1][2]**2)), numpy.arctan2( numpy.sqrt(1 - T3_6[1][2]**2), T3_6[1][2])
 
     # T1_2 = dh_transformation()
     # T2_3 = dh_transformation()
