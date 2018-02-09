@@ -34,6 +34,8 @@ class KukaR210:
         self.d1 = 0.75
         self.d4 = 1.5
         self.dg = 0.303
+        self.d34 = 0.96
+        self.d45 = 0.54
 
         qz = tf.transformations.rotation_matrix(pi, (0,0,1))    
         qy = tf.transformations.rotation_matrix(-pi/2, (0,1,0))    
@@ -85,9 +87,11 @@ class KukaR210:
         # calculate triangle's side oppsition with theta3
         vec_J2_W = numpy.subtract(wrist_pos, self.get_joint2_position(q1))
         side_B = self.vec_len(vec_J2_W)
+        side_d4_cor = numpy.sqrt(self.d4**2 + self.a3**2)
+        delta = numpy.arctan2(abs(self.a3), self.d34) - numpy.arctan2(abs(self.a3), self.d4)
 
         # find theta 3 prime which expresses the relative angle with theta 2
-        c3_prime = (side_B**2 - self.a2**2 - self.d4**2) / (2 * self.a2 * self.d4)
+        c3_prime = (side_B**2 - self.a2**2 - side_d4_cor**2) / (2 * self.a2 * side_d4_cor)
         prime3 = numpy.arctan2(numpy.sqrt(1 - (c3_prime**2)), c3_prime)
 
         # find theta2 and theta3
@@ -95,7 +99,7 @@ class KukaR210:
         gamma = numpy.arctan2(Kuka.d4 * numpy.sin(prime3), Kuka.d4 * numpy.cos(prime3) + Kuka.a2)
 
         q2 = (numpy.pi/2) - beta - gamma
-        q3 = prime3 - (numpy.pi/2)
+        q3 = prime3 - (numpy.pi/2) - delta
 
         # get T3_6 
         T0_3_inv = self.get_T0_3_inv(q1, q2, q3)
@@ -135,11 +139,8 @@ def handle_calculate_IK(req):
     	#
         ###
 
-        # Initialize service response
         joint_trajectory_list = []
-        theta4_list = []
-        theta5_list = []
-        theta6_list = []
+        # Initialize service response
         for x in xrange(0, len(req.poses)):
             # IK code starts here
             joint_trajectory_point = JointTrajectoryPoint()
@@ -171,13 +172,7 @@ def handle_calculate_IK(req):
             # In the next line replace theta1,theta2...,theta6 by your joint angle variables
     	    joint_trajectory_point.positions = [theta1, theta2, theta3, theta4, theta5, theta6]
     	    joint_trajectory_list.append(joint_trajectory_point)
-        #     theta4_list.append(theta4)
-        #     theta5_list.append(theta5)
-        #     theta6_list.append(theta6)
 
-        # print theta4_list
-        # print theta5_list
-        # print theta6_list
         rospy.loginfo("length of Joint Trajectory List: %s" % len(joint_trajectory_list))
         return CalculateIKResponse(joint_trajectory_list)
 
